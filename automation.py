@@ -1,0 +1,572 @@
+# automation.py
+import pandas as pd
+import numpy as np
+import re
+from pathlib import Path
+from flask import Flask, request, jsonify, send_file
+import traceback
+import uuid
+from threading import Thread, Lock
+import time
+# update 0.1
+
+import os 
+from selenium import webdriver # type: ignore
+from selenium.webdriver.chrome.service import Service # type: ignore
+from selenium.webdriver.common.by import By # type: ignore
+from selenium.webdriver.chrome.options import Options # type: ignore
+from webdriver_manager.chrome import ChromeDriverManager # type: ignore
+from selenium.common.exceptions import NoSuchElementException, TimeoutException # type: ignore
+from selenium.webdriver.support.ui import WebDriverWait # type: ignore
+from selenium.webdriver.support import expected_conditions as EC # type: ignore
+from selenium.webdriver.common.action_chains import ActionChains
+
+RUBIKLAB_LOGIN_URL = "https://app.Rubiklab.ai/login"
+RUBIKLAB_EMAIL = os.getenv("RUBIKLAB_EMAIL", "eya@supra.tools")
+RUBIKLAB_HEADLESS = os.getenv("RUBIKLAB_HEADLESS", "1") == "1"
+RUBIKLAB_KEEP_OPEN = os.getenv("RUBIKLAB_KEEP_OPEN", "0") == "1"
+RUBIKLAB_WAIT_TIMEOUT = 20
+OPEN_BROWSERS = []
+#.....
+# Optional dependency for copying sheets: openpyxl
+try:
+    from openpyxl import load_workbook
+    OPENPYXL_AVAILABLE = True
+except Exception:
+    OPENPYXL_AVAILABLE = False
+
+# ============ PATHS & SETTINGS ============
+SCRIPT_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = SCRIPT_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+# Template files (fixed)
+TEMPLATE_PATH = SCRIPT_DIR / "Edgard_&_Cooper Pricing 2.xlsx"
+COPIE_PATH = SCRIPT_DIR / "Edgard_&_Cooper Pricing 2 - Copie.xlsx"
+
+# Default names / constants
+OUT_NAME = "NEUSREL_ready_FROM_TEMPLATE.xlsx"  # fallback name if needed
+PROJECT_NAME = "Pricing_Project"
+MISSING_CODE = -99
+MAIN_METRIC_HINTS = [
+    "Kaufe ich", "I'll buy Binary", "Will I buy Binary",
+    "Purchase Likelihood", "Buy Intention", "Will Buy", "kaufen"
+]
+TOLERANCE = 10
+
+# job store for status tracking
+jobs = {}  # job_id -> {"status": str, "result"/"error": ...}
+xlwings_lock = Lock()  # guard xlwings access (Excel COM not thread-safe)
+
+# -------------------------
+# helper functions (same logic as prep script)
+# -------------------------
+def best_sheet_name(sheet_names):
+    m = {s.lower(): s for s in sheet_names}
+    for k, v in m.items():
+        if k.strip() in ("data full", "data_full", "datafull"):
+            return v
+    for s in sheet_names:
+        if "data" in s.lower() and "full" in s.lower():
+            return s
+    return sheet_names[0]
+
+# -------------------------
+def run_rubiklab_login(email: str, file_path: str): 
+    chrome_options = Options()
+    #if RUBIKLAB_HEADLESS:
+     #chrome_options.add_argument("--headless=new")
+     #chrome_options.add_argument("--disable-gpu") 
+   
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--start-maximized")
+    chrome_options.add_experimental_option("detach", True)
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=chrome_options
+    )
+    success = False 
+    try:
+        driver.get(RUBIKLAB_LOGIN_URL)
+
+        wait = WebDriverWait(driver, RUBIKLAB_WAIT_TIMEOUT)
+        email_box = wait.until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "input[type='email'], input[name='email']")
+            )
+        )
+        email_box.clear()
+        email_box.send_keys(email)
+        
+        # Click login/continue button
+        login_button = wait.until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "button[type='submit'], input[type='submit'], button")
+            )
+        )
+        login_button.click()
+
+        # Wait briefly for page transition
+        time.sleep(2)
+        time.sleep(5)
+        
+        # 3️⃣ Click "Start a new project" card on dashboard
+        start_project_button = wait.until(
+            EC.element_to_be_clickable(
+                (By.XPATH, "//*[contains(text(), 'Start a new project')]")
+            )
+        )
+        start_project_button.click()
+        
+        # 4️⃣ Wait for modal dialog and click the pink tile
+        dialog = wait.until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, "div[role='dialog']"))
+        )
+        
+        time.sleep(0.2)  # Let animation/overlay settle
+        
+        pink_tile = wait.until(
+            EC.presence_of_element_located(
+                (By.XPATH, "//div[@role='dialog']//li[contains(@class, 'flow-root') and contains(., 'Start a new project')]")
+            )
+        )
+        
+        driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", pink_tile)
+        try:
+            pink_tile.click()
+        except:
+            try:
+                driver.execute_script("arguments[0].click();", pink_tile)
+            except:
+                actions = ActionChains(driver)
+                actions.move_to_element(pink_tile).click().perform()
+        
+        # 🔥 5️⃣ NEW: Wait for name entry dialog and fill project name
+        name_input = wait.until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "div[role='dialog'] input")
+            )
+        )
+        project_name = os.path.basename(file_path).replace(os.path.splitext(file_path)[1], "")
+        print(f"✏️ Filling project name: {project_name}")
+
+        name_input.clear()
+        name_input.send_keys(project_name)
+
+        # Click submit button in the dialog
+        submit_button = wait.until(
+            EC.element_to_be_clickable(
+                (By.XPATH, "//div[@role='dialog']//button[contains(text(), 'Submit')]")
+            )
+        )
+        submit_button.click()
+        print("✅ Project name submitted.")  
+
+        # Screenshot after project creation
+        screenshot_path = UPLOAD_DIR / f"rubiklab_login_{uuid.uuid4().hex[:8]}.png"
+        driver.save_screenshot(str(screenshot_path))
+        success = True
+
+        return {
+            "message": f"Opened Rubiklab login and typed email {email}, clicked login, started new project, and submitted project name {project_name}.",
+            "screenshot": screenshot_path.name
+        }
+       
+    except (TimeoutException, NoSuchElementException) as exc:
+        raise RuntimeError(
+            f"Could not locate the email field on {RUBIKLAB_LOGIN_URL}: {exc}"
+        ) from exc
+    
+    finally:
+       OPEN_BROWSERS.append(driver)
+
+# -------------------------
+def normalize_id(x):
+    if pd.isna(x): return np.nan
+    return re.sub(r"\s+", "", str(x).strip())
+
+def find_best_id_column(survey_df, target_ids):
+    cands = [c for c in survey_df.columns if re.search(r"id|respondent|response|participant|token|external", c, re.I)]
+    if not cands: cands = list(survey_df.columns)
+    target = set(pd.Series(target_ids).dropna().astype(str).map(normalize_id))
+    best_col, best_rate = None, -1
+    for col in cands:
+        s = survey_df[col].astype(str).map(normalize_id)
+        rate = len(target & set(s.dropna())) / max(1, len(target))
+        if rate > best_rate:
+            best_rate, best_col = rate, col
+    return best_col, best_rate
+
+def pick_context_columns(survey_cols):
+    keys = {
+        "Age": r"\bage\b|birth|jahr|alter",
+        "Gender": r"gender|sex|geschlecht",
+        "Income": r"income|einkommen|salary|hhinc|hh_income",
+        "Employment": r"employ|occupation|arbeit|job",
+        "Education": r"educ|bildung|school|degree",
+    }
+    pairs = []
+    for label, pat in keys.items():
+        hits = [c for c in survey_cols if re.search(pat, c, re.I)]
+        if hits:
+            pairs.append((label, sorted(hits, key=len)[0]))
+    return pairs
+
+def find_col(df, candidates):
+    for cand in candidates:
+        for col in df.columns:
+            if cand.lower() == str(col).strip().lower():
+                return col
+    for col in df.columns:
+        name = str(col).lower()
+        for cand in candidates:
+            if cand.lower() in name:
+                return col
+    return None
+
+def excel_labels(n):
+    labels, i = [], 0
+    while len(labels) < n:
+        s, q = "", i
+        while True:
+            q, r = divmod(q, 26)
+            s = chr(65 + r) + s
+            if q == 0: break
+            q -= 1
+        labels.append(s); i += 1
+    return labels
+
+def idx_to_col_letter(idx: int) -> str:
+    n = idx + 1
+    s = ""
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+# Openpyxl-based simple sheet appender (values only)
+def append_sheets_with_openpyxl(dest_path: Path, src_path: Path):
+    if not OPENPYXL_AVAILABLE:
+        raise RuntimeError("openpyxl not available")
+    dest_wb = load_workbook(filename=str(dest_path))
+    src_wb = load_workbook(filename=str(src_path))
+    for src_name in src_wb.sheetnames:
+        src_ws = src_wb[src_name]
+        # create new sheet named like src (avoid duplicates by suffix)
+        new_name = src_name
+        i = 1
+        while new_name in dest_wb.sheetnames:
+            new_name = f"{src_name}_{i}"
+            i += 1
+        dest_wb.create_sheet(title=new_name)
+        dest_ws = dest_wb[new_name]
+        for row in src_ws.iter_rows(values_only=True):
+            dest_ws.append(list(row))
+    dest_wb.save(filename=str(dest_path))
+
+# xlwings-based full-fidelity sheet copy (requires Excel + xlwings)
+def append_sheets_with_xlwings(dest_path: Path, src_path: Path):
+    try:
+        import xlwings as xw
+    except Exception as e:
+        raise RuntimeError("xlwings not available") from e
+
+    # Excel COM operations must be serialized on the machine
+    with xlwings_lock:
+        app = xw.App(visible=False, add_book=False)
+        try:
+            app.display_alerts = False
+            app.screen_updating = False
+            dest = app.books.open(str(dest_path))
+            src = app.books.open(str(src_path))
+            try:
+                after_ws = dest.sheets[-1] if len(dest.sheets) > 0 else dest.sheets.add()
+                for sh in src.sheets:
+                    # Copy entire sheet (Excel will preserve formatting/objects)
+                    sh.api.Copy(After=after_ws.api)
+                    after_ws = dest.sheets[-1]
+                dest.save()
+            finally:
+                src.close()
+                dest.close()
+        finally:
+            app.quit()
+
+# ======================================================
+# Main processing function (same steps as prep_from_template.py)
+# ======================================================
+def run_cleaning(xlsx_path: Path, csv_path: Path, template_path: Path, copie_path: Path, out_path: Path):
+    # Load inputs
+    excel = pd.ExcelFile(xlsx_path)
+    sheet = best_sheet_name(excel.sheet_names)
+    data_full_raw = pd.read_excel(xlsx_path, sheet_name=sheet)
+    survey = pd.read_csv(csv_path)
+    tpl = pd.ExcelFile(template_path)
+
+    # merge survey context
+    df_id_candidates = [c for c in data_full_raw.columns if re.search(r"respondent.*id|resp.*id|\bid\b", c, re.I)]
+    df_id_col = df_id_candidates[0] if df_id_candidates else data_full_raw.columns[0]
+    survey_id_col, _ = find_best_id_column(survey, data_full_raw[df_id_col])
+
+    df = data_full_raw.copy(); sv = survey.copy()
+    df["_merge_id_"] = df[df_id_col].map(normalize_id)
+    sv["_merge_id_"] = sv[survey_id_col].map(normalize_id)
+    merged = df.merge(sv, on="_merge_id_", how="left", suffixes=("", "_survey")).drop(columns=["_merge_id_"])
+
+    context_pairs = pick_context_columns(survey.columns)
+    context_cols = [orig for _, orig in context_pairs]
+    tidy_cols = list(data_full_raw.columns) + [c for c in context_cols if c in merged.columns]
+    df_full = merged[tidy_cols].copy()
+    df_full.rename(columns={orig: label for label, orig in context_pairs}, inplace=True)
+
+    # BAD? logic
+    e_idx, f_idx, g_idx = 4, 5, 6
+    e_col, f_col, g_col = df_full.columns[e_idx], df_full.columns[f_idx], df_full.columns[g_idx]
+    for c in [e_col, f_col, g_col]:
+        df_full[c] = pd.to_numeric(df_full[c], errors="coerce")
+    df_full["BAD?"] = ((df_full[[e_col, f_col]].mean(axis=1) - df_full[g_col]).abs() <= TOLERANCE).astype(int)
+
+    col_buy = find_col(df_full, MAIN_METRIC_HINTS)
+
+    # Split good / bad
+    data_good = df_full[df_full["BAD?"] == 1].drop(columns=["BAD?"]).copy()
+    data_bad = df_full[df_full["BAD?"] == 0].copy()
+
+    header_numbers = list(range(1, len(data_good.columns) + 1))
+    data_sheet = pd.concat([pd.DataFrame([header_numbers], columns=data_good.columns),
+                            data_good], ignore_index=True)
+
+    # Project tab construction (as requested)
+    n_cols = len(data_good.columns)
+    start_col_idx = 6
+    total_needed_cols = start_col_idx + n_cols + 10
+    col_names = excel_labels(total_needed_cols)
+
+    proj = pd.DataFrame(index=range(1, 60), columns=col_names)
+    proj.iloc[:, :] = ""
+    proj.iat[0, 0] = 0
+    proj.iat[0, 1] = re.sub(r"_+", " ", str(PROJECT_NAME)).strip()
+
+    for j, name in enumerate(data_good.columns):
+        proj.iat[0, start_col_idx + j] = name
+
+    rows_to_fill = min(n_cols, len(proj))
+    proj.iat[0, 4] = "Missing"
+
+    for i in range(1, rows_to_fill + 1):
+        var = data_good.columns[i - 1]
+        proj.iat[i, 0] = var
+        proj.iat[i, 1] = i
+        proj.iat[i, 2] = i
+        proj.iat[i, 3] = 0
+        proj.iat[i, 4] = MISSING_CODE
+
+    # fill column F (index 5) with 1s
+    for i in range(1, rows_to_fill + 1):
+        proj.iat[i, 5] = 1
+
+    # initialize mapping zone (G→) to 0
+    for j in range(n_cols):
+        for i in range(1, rows_to_fill + 1):
+            proj.iat[i, start_col_idx + j] = 0
+
+    # put 1 in "Kaufe ich" for specific variables only
+    def _norm(s: str) -> str:
+        s = str(s).replace("\n", " ")
+        s = re.sub(r"\s+", " ", s).strip().lower()
+        s = re.sub(r"[^\w\s]+", "", s)
+        return s
+
+    headers = [proj.iat[0, start_col_idx + j] for j in range(n_cols)]
+    kaufe_idx = next((j for j, h in enumerate(headers) if _norm(h) == _norm("Kaufe ich")), None)
+    KAUFE_ICH_INCLUDE = [
+        "Price Level", "Fair", "Angemessen", "Will ich nicht", "Riskant",
+        "Gender", "Age", "Income",
+        "Ich habe dieses Produkt schon einmal gekauft.",
+        "Ich kaufe regelmäßig Produkte dieser Marke.",
+        "Das Produkt ist von einer Marke mit sehr gutem Ruf.",
+        "Ich (wir) haben einen vergleichsweise hohen Bedarf an dieser Art von Produkten.",
+    ]
+    include_norm = {_norm(x) for x in KAUFE_ICH_INCLUDE}
+
+    if kaufe_idx is not None:
+        for i in range(1, rows_to_fill + 1):
+            if _norm(proj.iat[i, 0]) in include_norm:
+                proj.iat[i, start_col_idx + kaufe_idx] = 1
+    elif col_buy:
+        fb_idx = next((j for j, h in enumerate(headers) if _norm(h) == _norm(col_buy)), None)
+        if fb_idx is not None:
+            for i in range(1, rows_to_fill + 1):
+                if _norm(proj.iat[i, 0]) in include_norm:
+                    proj.iat[i, start_col_idx + fb_idx] = 1
+
+    # fill remaining empty cells with 0 (except E1 which is "Missing")
+    for i in range(1, rows_to_fill + 1):
+        for j in [1, 2, 3, 4]:
+            if pd.isna(proj.iat[i, j]) or proj.iat[i, j] == "":
+                proj.iat[i, j] = 0 if j != 4 else MISSING_CODE
+        for j in range(start_col_idx, start_col_idx + n_cols):
+            if pd.isna(proj.iat[i, j]) or proj.iat[i, j] == "":
+                proj.iat[i, j] = 0
+
+    # Save workbook with xlsxwriter (values and formulas)
+    with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
+        df_full.to_excel(writer, sheet_name="Data FULL", index=False)
+        data_sheet.to_excel(writer, sheet_name="Data", index=False, header=True)
+        data_bad.to_excel(writer, sheet_name="Data bad", index=False)
+        proj.to_excel(writer, sheet_name="Project", index=False, header=False)
+
+        # Write BAD? formula in Data FULL as in original script
+        try:
+            ws_full = writer.sheets["Data FULL"]
+            bad_col_idx = list(df_full.columns).index("BAD?")
+            e_letter = idx_to_col_letter(e_idx)
+            f_letter = idx_to_col_letter(f_idx)
+            g_letter = idx_to_col_letter(g_idx)
+            total_rows = len(df_full)
+            for r in range(total_rows):
+                excel_row = r + 2  # first data row is row 2
+                ws_full.write_formula(
+                    r + 1, bad_col_idx,
+                    f"=IF(ABS(AVERAGE(${e_letter}{excel_row}:${f_letter}{excel_row})-${g_letter}{excel_row})<={TOLERANCE},1,0)"
+                )
+        except Exception as e:
+            print("Warning: could not write BAD? formula:", e)
+
+    # Append sheets from copie_path into out_path: try full-fidelity xlwings, fallback openpyxl
+    try:
+        if copie_path.exists():
+            try:
+                append_sheets_with_xlwings(out_path, copie_path)
+            except Exception as ex_x:
+                print("xlwings not available or failed:", ex_x)
+                if OPENPYXL_AVAILABLE:
+                    try:
+                        append_sheets_with_openpyxl(out_path, copie_path)
+                    except Exception as ex_o:
+                        print("openpyxl append failed:", ex_o)
+                else:
+                    print("openpyxl not available — skipping sheet append.")
+    except Exception as e:
+        print("Error while appending sheets:", e)
+
+# ===========================
+# Flask app
+# ===========================
+from flask_cors import CORS
+
+app = Flask(__name__, static_folder="static")
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+@app.route("/")
+def home():
+    return app.send_static_file("index.html") if (SCRIPT_DIR / "static" / "index.html").exists() else "Automation API"
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    try:
+        if "xlsx" not in request.files or "csv" not in request.files:
+            return jsonify({"success": False, "error": "Missing XLSX or CSV file"}), 400
+
+        xlsx_file = request.files["xlsx"]
+        csv_file = request.files["csv"]
+
+        # Save uploads
+        xlsx_path = UPLOAD_DIR / xlsx_file.filename
+        csv_path = UPLOAD_DIR / csv_file.filename
+        xlsx_file.save(xlsx_path)
+        csv_file.save(csv_path)
+
+        job_id = str(uuid.uuid4())
+        jobs[job_id] = {"status": "queued", "created_at": time.time()}
+
+        def worker():
+            jobs[job_id]["status"] = "running"
+            try:
+                template_path = TEMPLATE_PATH
+                copie_path = COPIE_PATH
+                # derive output name from uploaded xlsx
+                out_path = UPLOAD_DIR / f"{xlsx_path.stem}_NEUSREL_ready_FROM_TEMPLATE.xlsx"
+                run_cleaning(xlsx_path, csv_path, template_path, copie_path, out_path)
+                jobs[job_id]["status"] = "done"
+                jobs[job_id]["result"] = {"output_name": out_path.name, "download_url": f"/download/{out_path.name}"}
+            except Exception as e:
+                jobs[job_id]["status"] = "error"
+                jobs[job_id]["error"] = str(e)
+                traceback.print_exc()
+
+        Thread(target=worker, daemon=True).start()
+        return jsonify({"success": True, "job_id": job_id}), 202
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/status/<job_id>", methods=["GET"])
+def status(job_id):
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+    return jsonify({"success": True, "job": job})
+
+@app.route("/download/<filename>")
+def download(filename):
+    path = UPLOAD_DIR / filename
+    if not path.exists():
+        return "File not found", 404
+    return send_file(path, as_attachment=True)
+#--------------------
+@app.route("/survey-upload", methods=["POST"])
+def survey_upload():
+    try:
+        if "file" not in request.files:
+            return jsonify({"success": False, "error": "No survey file uploaded."}), 400
+
+        survey_file = request.files["file"]
+        saved_path = UPLOAD_DIR / survey_file.filename
+        survey_file.save(saved_path)
+
+        job_id = str(uuid.uuid4())
+        jobs[job_id] = {
+            "status": "queued",
+            "created_at": time.time(),
+            "log": [f"Survey file saved to {saved_path.name}."]
+        }
+
+        def worker():
+            jobs[job_id]["status"] = "running"
+            try:
+                email = RUBIKLAB_EMAIL
+                jobs[job_id]["log"].append(f"Launching Rubiklab automation for {email}...")
+
+                # ✅ Pass saved_path too
+                result = run_rubiklab_login(email, saved_path)
+
+                jobs[job_id]["status"] = "done"
+                jobs[job_id]["result"] = {
+                    "message": result["message"],
+                    "screenshot": result.get("screenshot"),
+                    "saved_file": saved_path.name
+                }
+            except Exception as exc:
+                jobs[job_id]["status"] = "error"
+                jobs[job_id]["error"] = str(exc)
+                jobs[job_id]["log"].append(f"Automation failed: {exc}")
+                traceback.print_exc()
+
+        # Start background worker thread
+        Thread(target=worker, daemon=True).start()
+
+        return jsonify({"success": True, "job_id": job_id}), 202
+
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+# -------------------
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=False)

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# App data
+uploads/
+*.log
+
+# Env
+.env
+*.env
+
+# Node (if any)
+node_modules/
+package-lock.json
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Docker
+**/.dockerignore
+
+# (Optional) large Excel files — remove if you want them tracked
+Edgard_&_Cooper Pricing 2.xlsx
+Edgard_&_Cooper Pricing 2 - Copie.xlsx

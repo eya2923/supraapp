@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SUPRA PRICE OPTIMIZER </title>
+<style>
+  :root{
+    --blue:#1e3a8a;
+    --green:#93d508;
+    --bg:#f7fafc;
+    --card:#ffffff;
+    --muted:#6b7280;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;
+    background:var(--bg);
+    margin:0;
+    padding:0;
+    color:#111;
+    min-height:100vh;
+    display:flex;
+    flex-direction:row;
+  }
+
+  .sidebar {
+    width:220px;
+    background:var(--green);
+    color:#fff;
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    flex-shrink:0;
+    height:100vh;
+  }
+
+  .sidebar .top {
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+
+  .logo { font-weight:700; margin-bottom:6px; }
+
+  .sidebar .btn {
+    background:#fff;
+    color:var(--blue);
+    border:0;
+    padding:10px;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:600;
+    text-align:center;
+    transition:transform .08s ease, box-shadow .08s ease;
+    box-shadow:0 1px 0 rgba(0,0,0,0.04);
+  }
+  .sidebar .btn:hover{ transform:translateY(-2px) }
+
+  .sidebar .external {
+    background:transparent;
+    color:#fff;
+    border:1px solid rgba(255,255,255,0.18);
+    padding:8px;
+    border-radius:8px;
+  }
+
+  .sidebar .external.btn {
+    background:transparent;
+    color:#fff;
+    border:1px solid rgba(255,255,255,0.14);
+  }
+
+  .main {
+    flex:1;
+    padding:20px 28px;
+    overflow:auto;
+  }
+
+  .container{max-width:920px;margin:8px auto}
+  .card{background:var(--card); border-radius:12px; padding:20px; box-shadow:0 6px 20px rgba(16,24,40,0.06)}
+  h1{margin:0 0 8px;font-size:20px;color:var(--blue)}
+  p.lead{margin:0 0 16px;color:var(--muted)}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  label.filebox{flex:1;display:block;border:1px dashed #cbd5e1;padding:12px;border-radius:8px;text-align:center;cursor:pointer;background:#fbfdff}
+  input[type=file]{display:none}
+  .controls{margin-top:12px;display:flex;gap:12px;align-items:center}
+  button.action{background:var(--blue); color:#fff; border:0;padding:10px 14px;border-radius:8px;cursor:pointer}
+  button.action[disabled]{opacity:.6;cursor:not-allowed}
+  progress{width:100%; height:12px; appearance:none;border-radius:6px}
+  .log{display:none}
+  a.result{display:inline-block;margin-top:12px;color:var(--blue)}
+  .small{font-size:13px;color:var(--muted)}
+  .tip{ text-align:center;margin-top:12px;color:var(--muted);font-size:13px }
+
+  .sidebar .logo-image {
+    margin-top:auto;
+    text-align:center;
+    padding-top:12px;
+  }
+  .sidebar .logo-image img {
+    max-width:160px;
+    width:100%;
+    height:auto;
+    display:inline-block;
+  }
+
+  @media (max-width:760px){
+    body{flex-direction:column}
+    .sidebar{width:100%;flex-direction:row;gap:8px;padding:12px;overflow:auto;height:auto}
+    .sidebar .top{flex-direction:row; gap:8px; align-items:center}
+    .sidebar .logo-image{display:none}
+    .main{padding:12px}
+  }
+</style>
+</head> 
+<body>
+<script>
+(function(){
+  const script=document.createElement("script");
+  script.src="https://www.chatbase.co/embed.min.js";
+  script.id="8-VDpvF1GYIUAM-uDRazr";
+  document.body.appendChild(script)
+})();
+</script>
+  <div class="sidebar" role="navigation" aria-label="Main menu">
+    <div class="top">
+      <div class="logo">SUPRA 
+             PRICE OPTIMIZER </div>
+
+  <button class="btn" onclick="showSection('homeSection')" title="Go to Home Page">🏠 Home</button>
+
+      <button class="btn external" onclick="window.open('https://pro.supra.tools/', '_blank')" title="Open Online setup">Online setup</button>
+
+      <button class="btn" onclick="showSection('surveySection')" title="Survey design section">Survey design</button>
+
+      <button class="btn external" onclick="window.open('https://platform.purespectrum.com/', '_blank')" title="Open Survey Field Phase">
+        Survey Field Phase
+      </button>
+
+      <button class="btn" onclick="showSection('cleaningSection')" title="Cleaning data section">Cleaning data</button>
+    </div>
+
+    <div class="logo-image" aria-hidden="false">
+      <img src="/static/supralogo.png" alt="Supra Logo">
+    </div>
+  </div>
+
+  <div class="main">
+     <div class="container" id="homeSection" style="display:none">
+  <div class="card">
+    <h1>Welcome to SUPRA PRICE OPTIMIZER</h1>
+    <p class="lead">Easily manage your survey design, data collection, and cleaning processes all in one place.</p>
+
+    
+  </div>
+</div>
+    <div class="container" id="surveySection" style="display:none">
+    
+      <div class="card">
+        <h1>Survey Design — Upload File</h1>
+        <p class="lead">Upload your survey design file here (CSV, XLSX...).</p>
+
+        <div class="row">
+          <label class="filebox">Choose Survey File<br><span class="small" id="surveyName">No file chosen</span>
+            <input id="surveyInput" type="file" accept=".csv,.xlsx,.xls" />
+          </label>
+        </div>
+
+        <div class="controls">
+          <button class="action" id="surveyUploadBtn">Upload Survey</button>
+          <div style="flex:1">
+            <progress id="surveyProgress" value="0" max="100" style="display:none"></progress>
+          </div>
+          <div id="surveyStatus" class="small" aria-live="polite"></div>
+        </div>
+
+        <div id="surveyResult" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div class="container" id="cleaningSection" style="display:none">
+      <div class="card">
+        <h1>Upload XLSX & CSV</h1>
+        <p class="lead">Select your experiment workbook (.xlsx) and survey file (.csv). Only these two files will be provided to the cleaning script.</p>
+
+        <div class="row">
+          <label class="filebox" id="xlsxBox">Choose XLSX file<br><span class="small" id="xlsxName">No file chosen</span>
+            <input id="xlsxInput" type="file" accept=".xlsx,.xls" />
+          </label>
+
+          <label class="filebox" id="csvBox">Choose CSV file<br><span class="small" id="csvName">No file chosen</span>
+            <input id="csvInput" type="file" accept=".csv,text/csv" />
+          </label>
+        </div>
+
+        <div class="controls">
+          <button class="action" id="uploadBtn">Upload & Run</button>
+          <div style="flex:1">
+            <progress id="progress" value="0" max="100" style="display:none"></progress>
+          </div>
+          <div id="status" class="small" aria-live="polite"></div>
+        </div>
+
+        <div id="log" class="log" aria-hidden="true"></div>
+        <div id="resultLink" style="margin-top:6px"></div>
+      </div>
+
+      <p class="tip" id="tip">A simple status message will appear here when the operation is running or finished.</p>
+    </div>
+  </div>
+
+<script>
+function showSection(id){
+  const sections = ['homeSection','surveySection','cleaningSection'];
+  sections.forEach(s => {
+    const el = document.getElementById(s);
+    if(!el) return;
+    el.style.display = (s === id) ? 'block' : 'none';
+  });
+}
+showSection('homeSection');
+
+async function pollJob(jobId, options = {}){
+  const {
+    pollInterval = 2000,
+    onTick = () => {},
+    onUpdate = () => {},
+    onDone = () => {},
+    onError = () => {}
+  } = options;
+
+  const pollUrl = '/status/' + encodeURIComponent(jobId);
+
+  while (true) {
+    onTick();
+    try {
+      const resp = await fetch(pollUrl);
+      if (!resp.ok) throw new Error('Status request failed: ' + resp.status);
+      const json = await resp.json();
+      if (!json.success) throw new Error('Status check failed: ' + JSON.stringify(json));
+      const job = json.job || {};
+      onUpdate(job);
+      if (job.status === 'done') {
+        onDone(job);
+        return;
+      }
+      if (job.status === 'error') {
+        onError(job);
+        return;
+      }
+    } catch (err) {
+      onError({ error: err.message || String(err), exception: err, isPollError: true });
+      return;
+    }
+    await new Promise(r => setTimeout(r, pollInterval));
+  }
+}
+
+function uploadWithXHR(url, formData, onProgress){
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.responseType = 'json';
+
+    xhr.upload.onprogress = function(e){
+      if(e.lengthComputable){
+        const pct = Math.round((e.loaded / e.total) * 100);
+        onProgress && onProgress(pct);
+      }
+    };
+
+    xhr.onreadystatechange = function(){
+      if(xhr.readyState === 4){
+        if(xhr.status >= 200 && xhr.status < 300){
+          let res = null;
+          try{
+            res = xhr.response || (xhr.responseText ? JSON.parse(xhr.responseText) : null);
+          }catch(parseErr){
+            reject(new Error('Invalid JSON response'));
+            return;
+          }
+          if(!res){ reject(new Error('No JSON response from server.')); return; }
+          resolve(res);
+        } else {
+          reject(new Error('Server error: ' + xhr.status + ' ' + xhr.statusText));
+        }
+      }
+    };
+
+    xhr.onerror = function(){ reject(new Error('Network error')); };
+    xhr.send(formData);
+  });
+}
+
+/* Survey upload */
+const surveyInput = document.getElementById('surveyInput');
+const surveyName = document.getElementById('surveyName');
+const surveyUploadBtn = document.getElementById('surveyUploadBtn');
+const surveyProgress = document.getElementById('surveyProgress');
+const surveyStatus = document.getElementById('surveyStatus');
+const surveyResult = document.getElementById('surveyResult');
+
+surveyInput && surveyInput.addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  surveyName.textContent = f ? f.name : 'No file chosen';
+  console.log('Survey selected:', f ? f.name : 'none');
+});
+
+surveyUploadBtn && surveyUploadBtn.addEventListener('click', async ()=>{
+  const file = surveyInput.files[0];
+  if(!file){
+    alert('Please choose a survey file.');
+    return;
+  }
+  surveyUploadBtn.disabled = true;
+  surveyProgress.style.display = '';
+  surveyProgress.value = 5;
+  surveyStatus.textContent = 'Uploading survey file…';
+  surveyResult.innerHTML = '';
+
+  try{
+    const form = new FormData();
+    form.append('file', file);
+    const uploadResp = await uploadWithXHR('/survey-upload', form, (percent) => {
+      surveyProgress.value = Math.max(5, 5 + Math.round(percent * 0.6));
+    });
+
+    if(uploadResp && uploadResp.job_id){
+      let lastStatus = null;
+      await pollJob(uploadResp.job_id, {
+        onTick(){
+          surveyProgress.value = Math.min(95, (surveyProgress.value || 20) + 3);
+        },
+        onUpdate(job){
+          if(job.status && job.status !== lastStatus){
+            lastStatus = job.status;
+            console.log('Survey job status:', job.status);
+          }
+          const logs = Array.isArray(job.log) ? job.log : [];
+          if(logs.length){
+            surveyResult.innerHTML = '<pre class="small">' + escapeHtml(logs.join('')) + '</pre>';
+          }
+          surveyStatus.textContent = job.status ? 'Status: ' + job.status : 'Status: working…';
+        },
+        onDone(job){
+          surveyProgress.value = 100;
+          surveyStatus.textContent = job.result?.message || 'Automation finished.';
+          const logs = Array.isArray(job.log) ? job.log : [];
+          if(logs.length){
+            surveyResult.innerHTML = '<pre class="small">' + escapeHtml(logs.join('')) + '</pre>';
+          }
+        },
+        onError(job){
+          const message = job?.error || 'Automation failed.';
+          console.error('Survey automation error:', message);
+          surveyProgress.value = 0;
+          surveyStatus.textContent = message;
+          const logs = Array.isArray(job?.log) ? job.log : [];
+          if(logs.length){
+            surveyResult.innerHTML = '<pre class="small">' + escapeHtml(logs.join('')) + '</pre>';
+          }
+        }
+      });
+    } else {
+      throw new Error('Unexpected response from /survey-upload');
+    }
+  } catch(err){
+    console.error(err);
+    surveyStatus.textContent = err.message || 'Upload failed.';
+    alert(err.message || err);
+  } finally {
+    surveyUploadBtn.disabled = false;
+    setTimeout(() => { surveyProgress.style.display = 'none'; }, 800);
+  }
+});
+
+/* Cleaning/upload script */
+(() => {
+  console.log('✅ Frontend script running — cleaning page loaded.');
+
+  const xlsxInputEl = document.getElementById('xlsxInput');
+  const csvInputEl  = document.getElementById('csvInput');
+  const xlsxNameEl  = document.getElementById('xlsxName');
+  const csvNameEl   = document.getElementById('csvName');
+  const uploadBtn   = document.getElementById('uploadBtn');
+  const progressEl  = document.getElementById('progress');
+  const statusEl    = document.getElementById('status');
+  const logEl       = document.getElementById('log');
+  const resultLink  = document.getElementById('resultLink');
+  const tipEl       = document.getElementById('tip');
+
+  function showLog(msg){
+    console.log(msg);
+  }
+
+  function setStatusSimple(text){
+    statusEl.textContent = text || '';
+    tipEl.textContent = text ? '' : 'A simple status message will appear here when the operation is running or finished.';
+  }
+
+  function resetUI(){
+    progressEl.style.display = 'none';
+    progressEl.value = 0;
+    setStatusSimple('');
+    resultLink.innerHTML = '';
+    tipEl.textContent = 'A simple status message will appear here when the operation is running or finished.';
+  }
+
+  xlsxInputEl && xlsxInputEl.addEventListener('change', (e)=>{
+    const f = e.target.files[0];
+    xlsxNameEl.textContent = f ? f.name : 'No file chosen';
+    showLog('XLSX selected: ' + (f ? f.name : 'none'));
+  });
+
+  csvInputEl && csvInputEl.addEventListener('change', (e)=>{
+    const f = e.target.files[0];
+    csvNameEl.textContent = f ? f.name : 'No file chosen';
+    showLog('CSV selected: ' + (f ? f.name : 'none'));
+  });
+
+  uploadBtn && uploadBtn.addEventListener('click', async ()=>{
+    resetUI();
+    const xlsx = xlsxInputEl.files[0];
+    const csv  = csvInputEl.files[0];
+    if(!xlsx || !csv){
+      alert('Please choose both an XLSX and a CSV file.');
+      showLog('Missing file(s) — upload aborted.');
+      return;
+    }
+
+    uploadBtn.disabled = true;
+    progressEl.style.display = '';
+    progressEl.value = 5;
+    setStatusSimple('Uploading files...');
+    showLog('Preparing FormData and starting upload...');
+
+    const form = new FormData();
+    form.append('xlsx', xlsx);
+    form.append('csv', csv);
+
+    try{
+      const uploadResp = await uploadWithXHR('/upload', form, (percent) => {
+        progressEl.value = 5 + Math.round(percent * 0.8);
+        showLog('Uploading: ' + percent + '%');
+      });
+
+      showLog('Upload response received: ' + JSON.stringify(uploadResp));
+
+      if (uploadResp && uploadResp.job_id) {
+        let lastStatus = null;
+        await pollJob(uploadResp.job_id, {
+          onTick(){
+            setStatusSimple('Processing on server...');
+            progressEl.value = Math.min(98, (progressEl.value || 20) + 4);
+          },
+          onUpdate(job){
+            if(job.status && job.status !== lastStatus){
+              lastStatus = job.status;
+              showLog('Job status changed: ' + job.status);
+            }
+          },
+          onDone(job){
+            showResult(job.result || {});
+          },
+          onError(job){
+            const message = job?.error || 'Server error';
+            setStatusSimple('Server error');
+            console.error('Server job error:', message);
+            if(job && job.log){
+              showLog('Server log:' + job.log.join(''));
+            }
+            progressEl.value = 0;
+            uploadBtn.disabled = false;
+          }
+        });
+      } else if (uploadResp && uploadResp.success) {
+        showResult(uploadResp);
+      } else {
+        throw new Error('Unexpected upload response: ' + JSON.stringify(uploadResp));
+      }
+    } catch(err){
+      console.error(err);
+      showLog('Upload or processing failed: ' + (err.message || err));
+      alert('Upload or processing failed: ' + (err.message || err));
+      setStatusSimple('Failed');
+      uploadBtn.disabled = false;
+      progressEl.value = 0;
+    }
+  });
+
+  function showResult(res){
+    progressEl.value = 100;
+    setStatusSimple('Done');
+    const url = res.download_url || res.output_url || null;
+    const name = res.output_name || (url ? url.split('/').pop() : 'result.xlsx');
+    if (url) {
+      resultLink.innerHTML = '<a class="result" href="' + escapeHtml(url) + '">' + 'Download processed file: ' + escapeHtml(name || 'result.xlsx') + '</a>';
+      console.log('Download URL:', url);
+    } else {
+      resultLink.textContent = res.message || 'Processing finished but no download link provided.';
+      console.log('Result message:', res.message);
+    }
+    if (res.log) {
+      console.log('--- server log ---' + res.log);
+    }
+    uploadBtn.disabled = false;
+  }
+
+  tipEl.textContent = 'Ready. Choose the files and click "Upload & Run".';
+
+})();
+
+function escapeHtml(s){
+  if(!s) return '';
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
+}
+
+  window.chatbaseConfig = {
+    chatbotId: "1876ea91-df40-46a8-b39e-3c35696ca030",
+  }
+</script>
+
+
+</body>
+</html>

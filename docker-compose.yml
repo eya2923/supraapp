@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  web:
+    build: .
+    container_name: supra_web
+    ports:
+      - "8000:8000"        # host:container
+    environment:
+      - RUBIKLAB_EMAIL=eya@supra.tools
+      - RUBIKLAB_HEADLESS=1
+      - RUBIKLAB_KEEP_OPEN=0
+      - PORT=8000          # internal port Flask listens on
+    volumes:
+      - ./uploads:/app/uploads  # keep generated files
+      - ./static:/app/static    # develop front easily
+    # If you run selenium inside the container later, add needed capabilities

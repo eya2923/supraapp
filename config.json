@@ -1,0 +1,15 @@
+
+
+{
+  "rubiklab": {
+    "loginUrl": "https://app.rubiklab.ai/login",
+    "email": "eya@supra.tools",
+    "dashboardUrlPattern": "**/dashboard**",
+    "passcodeSelector": "input[type=\"password\"], input[name=\"passcode\"]",
+    "headless": false,
+    "keepBrowserOpen": false,
+    "loginTimeoutMs": 60000,
+    "passcodePromptTimeoutMs": 60000,
+    "passcodeSubmitTimeoutMs": 180000
+  }
+}
