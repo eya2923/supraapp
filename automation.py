@@ -9,6 +9,7 @@ import uuid
 from threading import Thread, Lock
 import time
 # update 0.1
+from prometheus_flask_exporter import PrometheusMetrics
 
 import os 
 from selenium import webdriver # type: ignore
