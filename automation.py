@@ -565,7 +565,8 @@ def survey_upload():
         traceback.print_exc()
         return jsonify({"success": False, "error": str(exc)}), 500
 
-
+# Attach Prometheus metrics to your app
+metrics = PrometheusMetrics(app)  # this automatically adds /metrics
 # -------------------
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
