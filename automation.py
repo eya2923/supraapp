@@ -22,7 +22,7 @@ from selenium.webdriver.support.ui import WebDriverWait # type: ignore
 from selenium.webdriver.support import expected_conditions as EC # type: ignore
 from selenium.webdriver.common.action_chains import ActionChains
 
-RUBIKLAB_LOGIN_URL = "https://app.Rubiklab.ai/login"
+RUBIKLAB_LOGIN_URL = "https://app.Rubiklabe.ai/login"
 RUBIKLAB_EMAIL = os.getenv("RUBIKLAB_EMAIL", "eya@supra.tools")
 RUBIKLAB_HEADLESS = os.getenv("RUBIKLAB_HEADLESS", "1") == "1"
 RUBIKLAB_KEEP_OPEN = os.getenv("RUBIKLAB_KEEP_OPEN", "0") == "1"
